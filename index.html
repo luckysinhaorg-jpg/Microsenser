@@ -1,0 +1,2156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MicroSense — Optical Microplastic Detection System</title>
+  
+  <!-- Google Fonts CDN -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  
+  <!-- Chart.js 4.x CDN (loaded as UMD) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+
+  <style>
+    /* ----------------------------------------------------
+       DESIGN SYSTEM & VARIABLES
+       ---------------------------------------------------- */
+    :root {
+      --bg-color: #0a0f1a;
+      --bg-gradient: linear-gradient(135deg, #070a14 0%, #0c1424 100%);
+      --surface-color: rgba(15, 24, 37, 0.85);
+      --surface-hover: rgba(22, 36, 56, 0.9);
+      --border-color: rgba(0, 212, 180, 0.12);
+      --border-hover: rgba(0, 212, 180, 0.25);
+      --accent-color: #00d4b4;
+      --accent-glow: rgba(0, 212, 180, 0.3);
+      
+      /* LED Spectral Colors */
+      --blue-led: #4a9eff;
+      --blue-glow: rgba(74, 158, 255, 0.25);
+      --green-led: #44d97e;
+      --green-glow: rgba(68, 217, 126, 0.25);
+      --red-led: #ff5e5e;
+      --red-glow: rgba(255, 94, 94, 0.25);
+      
+      /* Turbidity & Alarms */
+      --turbidity-color: #f5a623;
+      --turbidity-glow: rgba(245, 166, 35, 0.2);
+      --warning-color: #ff4444;
+      --safe-color: #00d4b4;
+      
+      /* Typography Colors */
+      --text-primary: #e8f4f8;
+      --text-muted: #6b8fa8;
+      --text-dark: #050a12;
+      
+      /* Fonts */
+      --font-primary: 'Space Grotesk', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      --font-body: 'Inter', sans-serif;
+
+      /* Layout */
+      --header-height: 70px;
+    }
+
+    /* Reset & Core Styles */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      background-image: var(--bg-gradient);
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      padding-top: var(--header-height);
+      transition: outline 0.3s ease, box-shadow 0.3s ease;
+      position: relative;
+    }
+
+    /* Red alarm overlay for extreme turbidity */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+      z-index: 9999;
+      box-shadow: inset 0 0 0 0 transparent;
+      transition: box-shadow 0.5s ease;
+    }
+
+    body.red-flash-active::before {
+      animation: borderRedFlash 1.5s ease-out;
+    }
+
+    @keyframes borderRedFlash {
+      0% { box-shadow: inset 0 0 0 0 transparent; }
+      20% { box-shadow: inset 0 0 0 6px var(--warning-color), 0 0 30px rgba(255, 68, 68, 0.4); }
+      100% { box-shadow: inset 0 0 0 0 transparent; }
+    }
+
+    /* Scrollbar Styling */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: var(--bg-color);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #162235;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--accent-color);
+    }
+
+    /* ----------------------------------------------------
+       SECTION 1 — HEADER BAR (FIXED TOP)
+       ---------------------------------------------------- */
+    header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: var(--header-height);
+      background: #0a0f1a;
+      border-bottom: 1px solid rgba(0, 212, 180, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      z-index: 1000;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .water-drop-svg {
+      width: 24px;
+      height: 24px;
+      animation: dropPulse 3s ease-in-out infinite;
+      filter: drop-shadow(0 0 4px var(--accent-color));
+    }
+
+    @keyframes dropPulse {
+      0% { transform: scale(1) translateY(0); filter: drop-shadow(0 0 2px rgba(0, 212, 180, 0.4)); }
+      50% { transform: scale(1.15) translateY(-2px); filter: drop-shadow(0 0 8px rgba(0, 212, 180, 0.8)); }
+      100% { transform: scale(1) translateY(0); filter: drop-shadow(0 0 2px rgba(0, 212, 180, 0.4)); }
+    }
+
+    .brand-title {
+      font-family: var(--font-primary);
+      font-weight: 700;
+      font-size: 20px;
+      letter-spacing: 0.8px;
+      color: var(--text-primary);
+      display: flex;
+      flex-direction: column;
+      line-height: 1.1;
+    }
+
+    .brand-subtitle {
+      font-family: var(--font-body);
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--text-muted);
+      letter-spacing: 0.5px;
+      margin-top: 2px;
+    }
+
+    .header-center {
+      display: flex;
+      align-items: center;
+    }
+
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(15, 24, 37, 0.75);
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px solid var(--border-color);
+      font-family: var(--font-primary);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      transition: all 0.3s ease;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      position: relative;
+    }
+
+    .status-dot.live {
+      background-color: var(--safe-color);
+      box-shadow: 0 0 10px var(--safe-color);
+      animation: pulseDot 1.5s infinite alternate;
+    }
+
+    .status-dot.simulating {
+      background-color: var(--accent-color);
+      box-shadow: 0 0 10px var(--accent-color);
+      animation: pulseDotSim 1.5s infinite alternate;
+    }
+
+    .status-dot.disconnected {
+      background-color: var(--warning-color);
+      box-shadow: 0 0 10px var(--warning-color);
+    }
+
+    @keyframes pulseDot {
+      0% { transform: scale(1); opacity: 0.7; }
+      100% { transform: scale(1.3); opacity: 1; box-shadow: 0 0 16px var(--safe-color); }
+    }
+
+    @keyframes pulseDotSim {
+      0% { transform: scale(1); opacity: 0.7; }
+      100% { transform: scale(1.3); opacity: 1; box-shadow: 0 0 16px var(--accent-color); }
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .timestamp-label {
+      font-family: var(--font-primary);
+      font-size: 14px;
+      color: var(--text-muted);
+      letter-spacing: 0.5px;
+    }
+
+    .ip-label {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--accent-color);
+      background: rgba(0, 212, 180, 0.05);
+      border: 1px solid rgba(0, 212, 180, 0.15);
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+
+    /* ----------------------------------------------------
+       DASHBOARD WORKSPACE LAYOUT
+       ---------------------------------------------------- */
+    .dashboard-container {
+      max-width: 1440px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      flex-grow: 1;
+    }
+
+    /* Card Glassmorphic Base */
+    .dashboard-card {
+      background: var(--surface-color);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+      backdrop-filter: blur(10px);
+      padding: 20px;
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), 
+                  box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1), 
+                  border-color 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .dashboard-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 212, 180, 0.05);
+      border-color: var(--border-hover);
+    }
+
+    /* ----------------------------------------------------
+       SECTION 2 — HERO METRICS ROW (4 CARDS)
+       ---------------------------------------------------- */
+    .hero-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      gap: 20px;
+    }
+
+    .hero-card {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 140px;
+      padding: 18px 20px;
+    }
+
+    /* Individual top highlight borders */
+    .hero-card.turbidity-card { border-top: 4px solid var(--turbidity-color); }
+    .hero-card.blue-card { border-top: 4px solid var(--blue-led); }
+    .hero-card.green-card { border-top: 4px solid var(--green-led); }
+    .hero-card.red-card { border-top: 4px solid var(--red-led); }
+
+    /* Sub-tint background glow effects */
+    .hero-card.turbidity-card::after {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      background: radial-gradient(circle at top left, rgba(245, 166, 35, 0.03) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .hero-label {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      letter-spacing: 1px;
+    }
+
+    .hero-sub-label {
+      font-family: var(--font-body);
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .hero-value-container {
+      margin-top: 14px;
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+
+    .hero-value {
+      font-family: var(--font-primary);
+      font-weight: 700;
+      font-size: 32px;
+      line-height: 1;
+      letter-spacing: -0.5px;
+    }
+
+    .hero-unit {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .hero-footer {
+      margin-top: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+    }
+
+    /* Turbidity badge styling */
+    .turbidity-badge {
+      font-family: var(--font-primary);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 4px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+    
+    .turbidity-badge.clear {
+      background: rgba(68, 217, 126, 0.12);
+      color: var(--green-led);
+      border: 1px solid rgba(68, 217, 126, 0.2);
+    }
+    
+    .turbidity-badge.moderate {
+      background: rgba(245, 166, 35, 0.12);
+      color: var(--turbidity-color);
+      border: 1px solid rgba(245, 166, 35, 0.2);
+    }
+    
+    .turbidity-badge.high {
+      background: rgba(255, 94, 94, 0.12);
+      color: var(--red-led);
+      border: 1px solid rgba(255, 94, 94, 0.2);
+    }
+
+    .turbidity-badge.critical {
+      background: rgba(255, 68, 68, 0.2);
+      color: #ff3333;
+      border: 1px solid rgba(255, 68, 68, 0.4);
+      animation: alertPulse 1s infinite alternate;
+    }
+
+    @keyframes alertPulse {
+      0% { opacity: 0.75; box-shadow: 0 0 4px rgba(255, 68, 68, 0.2); }
+      100% { opacity: 1; box-shadow: 0 0 10px rgba(255, 68, 68, 0.5); }
+    }
+
+    .hero-footer-text {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .red-led-tag {
+      font-family: var(--font-body);
+      font-size: 9px;
+      font-weight: 600;
+      color: var(--accent-color);
+      background: rgba(0, 212, 180, 0.06);
+      border: 1px solid rgba(0, 212, 180, 0.15);
+      padding: 2px 6px;
+      border-radius: 4px;
+      letter-spacing: 0.2px;
+    }
+
+    /* Metric values colors */
+    .turbidity-card .hero-value { color: var(--turbidity-color); text-shadow: 0 0 10px rgba(245, 166, 35, 0.15); }
+    .blue-card .hero-value { color: var(--blue-led); text-shadow: 0 0 10px rgba(74, 158, 255, 0.15); }
+    .green-card .hero-value { color: var(--green-led); text-shadow: 0 0 10px rgba(68, 217, 126, 0.15); }
+    .red-card .hero-value { color: var(--red-led); text-shadow: 0 0 10px rgba(255, 94, 94, 0.15); }
+
+    /* ----------------------------------------------------
+       SECTION 3 — CHARTS AREA (2 x 2 GRID)
+       ---------------------------------------------------- */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    .chart-card {
+      display: flex;
+      flex-direction: column;
+      min-height: 280px;
+    }
+
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .chart-title {
+      font-family: var(--font-primary);
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: var(--text-primary);
+    }
+
+    .chart-canvas-container {
+      position: relative;
+      flex-grow: 1;
+      width: 100%;
+      height: 200px;
+    }
+
+    /* Gauge Specific CSS Layout */
+    .gauge-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      position: relative;
+    }
+
+    #confidenceGauge {
+      max-width: 280px;
+      max-height: 170px;
+      width: 100%;
+      height: auto;
+    }
+
+    /* ----------------------------------------------------
+       SECTION 4 — DATA TABLE AND CONTROLS (BOTTOM)
+       ---------------------------------------------------- */
+    .bottom-grid {
+      display: grid;
+      grid-template-columns: 1.5fr 1fr;
+      gap: 20px;
+    }
+
+    .bottom-card {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .bottom-card-header {
+      margin-bottom: 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      padding-bottom: 10px;
+    }
+
+    .bottom-card-title {
+      font-family: var(--font-primary);
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    /* Live readings table */
+    .table-container {
+      overflow-x: auto;
+      width: 100%;
+      flex-grow: 1;
+    }
+
+    .readings-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      text-align: left;
+      border-left: 2px solid var(--accent-color);
+    }
+
+    .readings-table th {
+      background: rgba(15, 24, 37, 0.5);
+      color: var(--text-muted);
+      font-weight: 600;
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(0, 212, 180, 0.1);
+      letter-spacing: 0.5px;
+    }
+
+    .readings-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+      color: var(--text-primary);
+    }
+
+    /* Highlight newest row */
+    .readings-table tbody tr:first-child {
+      background: rgba(0, 212, 180, 0.04);
+      color: var(--accent-color);
+    }
+
+    /* Newest row dynamic entry animation */
+    .new-row-animation {
+      animation: slideFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes slideFadeIn {
+      from { opacity: 0; transform: translateY(-8px); background-color: rgba(0, 212, 180, 0.2); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .readings-table tr:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    /* Controls Panel & Info System */
+    .controls-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .button-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .button-group-full {
+      grid-column: span 2;
+    }
+
+    .btn {
+      font-family: var(--font-primary);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      padding: 12px 16px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      outline: none;
+    }
+
+    /* Calibrate Base Button (Teal) */
+    .btn-primary {
+      background: var(--accent-color);
+      color: var(--text-dark);
+      box-shadow: 0 4px 14px rgba(0, 212, 180, 0.2);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #00ebd7;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(0, 212, 180, 0.35);
+    }
+
+    .btn-primary:active:not(:disabled) {
+      transform: translateY(1px);
+    }
+
+    /* Pulsing Calibration State */
+    .btn-primary.calibrating {
+      background: #00aa90;
+      color: var(--text-primary);
+      animation: buttonPulse 1s infinite alternate;
+      cursor: not-allowed;
+    }
+
+    @keyframes buttonPulse {
+      0% { opacity: 0.85; box-shadow: 0 0 4px rgba(0, 212, 180, 0.2); }
+      100% { opacity: 1; box-shadow: 0 0 15px rgba(0, 212, 180, 0.6); }
+    }
+
+    /* Download CSV Button (Muted Gray) */
+    .btn-secondary {
+      background: rgba(107, 143, 168, 0.08);
+      border: 1px solid rgba(107, 143, 168, 0.2);
+      color: var(--text-muted);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: rgba(107, 143, 168, 0.15);
+      color: var(--text-primary);
+      border-color: rgba(107, 143, 168, 0.4);
+    }
+
+    /* Clear Data Button (Red Outline) */
+    .btn-danger {
+      background: transparent;
+      border: 1px solid rgba(255, 94, 94, 0.3);
+      color: var(--red-led);
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background: rgba(255, 94, 94, 0.08);
+      border-color: var(--red-led);
+      box-shadow: 0 0 10px rgba(255, 94, 94, 0.1);
+    }
+
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* LCD styled Info Panel */
+    .info-panel {
+      background: #050a12;
+      border: 1px solid rgba(0, 212, 180, 0.08);
+      border-radius: 8px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.8);
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+    }
+
+    .info-label {
+      font-family: var(--font-primary);
+      color: var(--text-muted);
+      letter-spacing: 0.3px;
+    }
+
+    .info-value {
+      font-family: var(--font-mono);
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .info-value.teal {
+      color: var(--accent-color);
+      text-shadow: 0 0 8px rgba(0, 212, 180, 0.2);
+    }
+
+    .info-action-container {
+      margin-top: 4px;
+      border-top: 1px dashed rgba(107, 143, 168, 0.15);
+      padding-top: 10px;
+    }
+
+    .action-badge {
+      display: inline-block;
+      font-family: var(--font-primary);
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--text-dark);
+      background: var(--accent-color);
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .action-text {
+      font-family: var(--font-body);
+      font-size: 11px;
+      color: var(--text-primary);
+      line-height: 1.4;
+    }
+
+    /* Simulation Mode Controller Card */
+    .simulator-control-card {
+      background: rgba(0, 212, 180, 0.03);
+      border: 1px dashed rgba(0, 212, 180, 0.2);
+      border-radius: 8px;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .sim-label-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sim-title {
+      font-family: var(--font-primary);
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent-color);
+      letter-spacing: 0.3px;
+    }
+
+    .sim-desc {
+      font-family: var(--font-body);
+      font-size: 9px;
+      color: var(--text-muted);
+    }
+
+    /* Styled Scientific Toggle Switch */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 22px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #1a273a;
+      transition: .3s cubic-bezier(0.16, 1, 0.3, 1);
+      border-radius: 34px;
+      border: 1px solid rgba(0, 212, 180, 0.15);
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 14px;
+      width: 14px;
+      left: 3px;
+      bottom: 3px;
+      background-color: var(--text-muted);
+      transition: .3s cubic-bezier(0.16, 1, 0.3, 1);
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: rgba(0, 212, 180, 0.15);
+      border-color: var(--accent-color);
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(22px);
+      background-color: var(--accent-color);
+      box-shadow: 0 0 8px var(--accent-color);
+    }
+
+    /* ----------------------------------------------------
+       RESPONSIVE BEHAVIOR (MEDIA QUERIES)
+       ---------------------------------------------------- */
+    
+    /* Tablet Portrait and Below (< 1024px) */
+    @media (max-width: 1024px) {
+      .hero-row {
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      
+      .charts-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+      
+      .bottom-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+    }
+
+    /* Mobile Devices (< 768px) */
+    @media (max-width: 768px) {
+      header {
+        padding: 0 16px;
+      }
+      
+      .header-right {
+        gap: 12px;
+      }
+      
+      .timestamp-label {
+        display: none; /* Hide timestamp on very small devices to avoid wrap */
+      }
+
+      .dashboard-container {
+        padding: 16px;
+        gap: 16px;
+      }
+      
+      .hero-row {
+        grid-template-columns: 1fr 1fr; /* Compact 2x2 grid */
+        gap: 12px;
+      }
+      
+      .hero-card {
+        min-height: 120px;
+        padding: 12px 14px;
+      }
+      
+      .hero-value {
+        font-size: 26px;
+      }
+      
+      .chart-card {
+        min-height: 240px;
+        padding: 16px;
+      }
+      
+      .readings-table {
+        font-size: 10px;
+      }
+      
+      .readings-table th, .readings-table td {
+        padding: 6px 8px;
+      }
+      
+      .button-group {
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+      
+      .button-group-full {
+        grid-column: span 1;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ----------------------------------------------------
+       SECTION 1 — HEADER BAR
+       ---------------------------------------------------- -->
+  <header>
+    <div class="header-left">
+      <!-- Water Drop SVG Icon in Teal -->
+      <svg class="water-drop-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" fill="url(#dropGradient)" />
+        <defs>
+          <linearGradient id="dropGradient" x1="12" y1="2" x2="12" y2="22" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#00ffff" />
+            <stop offset="100%" stop-color="#00d4b4" />
+          </linearGradient>
+        </defs>
+      </svg>
+      <div class="brand-title">
+        MicroSense
+        <span class="brand-subtitle">Optical Microplastic Detection System</span>
+      </div>
+    </div>
+    
+    <div class="header-center">
+      <div class="status-pill">
+        <span id="statusDot" class="status-dot simulating"></span>
+        <span id="statusText">SIMULATING</span>
+      </div>
+    </div>
+    
+    <div class="header-right">
+      <span id="timestamp" class="timestamp-label">20:25:46</span>
+      <span class="ip-label">192.168.4.1</span>
+    </div>
+  </header>
+
+  <!-- Main Grid Workspace -->
+  <div class="dashboard-container">
+    
+    <!-- ----------------------------------------------------
+         SECTION 2 — HERO METRICS ROW
+         ---------------------------------------------------- -->
+    <div class="hero-row">
+      
+      <!-- Card 1: Turbidity -->
+      <div id="turbidityCard" class="dashboard-card hero-card turbidity-card">
+        <div class="hero-card-header">
+          <div>
+            <div class="hero-label">TURBIDITY</div>
+            <div class="hero-sub-label">Nephelometric Turbidity Units</div>
+          </div>
+        </div>
+        <div class="hero-value-container">
+          <span id="valTurbidity" class="hero-value">12.50</span>
+          <span class="hero-unit">NTU</span>
+        </div>
+        <div class="hero-footer">
+          <span id="badgeTurbidity" class="turbidity-badge moderate">MODERATE</span>
+        </div>
+      </div>
+      
+      <!-- Card 2: Blue LED Absorbance -->
+      <div class="dashboard-card hero-card blue-card">
+        <div class="hero-card-header">
+          <div>
+            <div class="hero-label">BLUE 470nm</div>
+            <div class="hero-sub-label">Absorbance (Beer-Lambert)</div>
+          </div>
+        </div>
+        <div class="hero-value-container">
+          <span id="valAbsBlue" class="hero-value">0.3421</span>
+          <span class="hero-unit">Abs</span>
+        </div>
+        <div class="hero-footer">
+          <span id="valIntBlue" class="hero-footer-text">Intensity: 682</span>
+        </div>
+      </div>
+      
+      <!-- Card 3: Green LED Absorbance -->
+      <div class="dashboard-card hero-card green-card">
+        <div class="hero-card-header">
+          <div>
+            <div class="hero-label">GREEN 525nm</div>
+            <div class="hero-sub-label">Absorbance (Beer-Lambert)</div>
+          </div>
+        </div>
+        <div class="hero-value-container">
+          <span id="valAbsGreen" class="hero-value">0.2873</span>
+          <span class="hero-unit">Abs</span>
+        </div>
+        <div class="hero-footer">
+          <span id="valIntGreen" class="hero-footer-text">Intensity: 719</span>
+        </div>
+      </div>
+      
+      <!-- Card 4: Red LED Absorbance -->
+      <div class="dashboard-card hero-card red-card">
+        <div class="hero-card-header">
+          <div>
+            <div class="hero-label">RED 636nm</div>
+            <div class="hero-sub-label">Absorbance (Beer-Lambert)</div>
+          </div>
+        </div>
+        <div class="hero-value-container">
+          <span id="valAbsRed" class="hero-value">0.1984</span>
+          <span class="hero-unit">Abs</span>
+        </div>
+        <div class="hero-footer">
+          <span id="valIntRed" class="hero-footer-text">Intensity: 754</span>
+          <span class="red-led-tag">Most Turbidity Resistant</span>
+        </div>
+      </div>
+      
+    </div>
+
+    <!-- ----------------------------------------------------
+         SECTION 3 — CHARTS AREA (2x2 GRID)
+         ---------------------------------------------------- -->
+    <div class="charts-grid">
+      
+      <!-- Chart 1: Absorbance All Wavelengths -->
+      <div class="dashboard-card chart-card">
+        <div class="chart-header">
+          <span class="chart-title">Absorbance — All Wavelengths</span>
+        </div>
+        <div class="chart-canvas-container">
+          <canvas id="chartAbsorbance"></canvas>
+        </div>
+      </div>
+      
+      <!-- Chart 2: Turbidity Over Time -->
+      <div class="dashboard-card chart-card">
+        <div class="chart-header">
+          <span class="chart-title">Turbidity — NTU</span>
+        </div>
+        <div class="chart-canvas-container">
+          <canvas id="chartTurbidity"></canvas>
+        </div>
+      </div>
+      
+      <!-- Chart 3: Raw Photodiode Intensity -->
+      <div class="dashboard-card chart-card">
+        <div class="chart-header">
+          <span class="chart-title">Photodiode Intensity — Raw ADC (0–1023)</span>
+        </div>
+        <div class="chart-canvas-container">
+          <canvas id="chartIntensity"></canvas>
+        </div>
+      </div>
+      
+      <!-- Chart 4: Detection Confidence Semicircular Gauge -->
+      <div class="dashboard-card chart-card">
+        <div class="chart-header">
+          <span class="chart-title">Detection Confidence</span>
+        </div>
+        <div class="gauge-wrapper">
+          <canvas id="confidenceGauge" width="280" height="170"></canvas>
+        </div>
+      </div>
+      
+    </div>
+
+    <!-- ----------------------------------------------------
+         SECTION 4 — DATA TABLE AND CONTROLS
+         ---------------------------------------------------- -->
+    <div class="bottom-grid">
+      
+      <!-- Left side — Live readings table -->
+      <div class="dashboard-card bottom-card">
+        <div class="bottom-card-header">
+          <span class="bottom-card-title">Recent Readings Log</span>
+        </div>
+        <div class="table-container">
+          <table id="readingsTable" class="readings-table">
+            <thead>
+              <tr>
+                <th>Time (ms)</th>
+                <th>Blue Abs</th>
+                <th>Green Abs</th>
+                <th>Red Abs</th>
+                <th>Int B</th>
+                <th>Int G</th>
+                <th>Int R</th>
+                <th>Turbidity</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody">
+              <!-- Dynamically populated rows -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <!-- Right side — Controls and Export Panel -->
+      <div class="dashboard-card bottom-card">
+        <div class="bottom-card-header">
+          <span class="bottom-card-title">Calibration & Export Panel</span>
+        </div>
+        <div class="controls-panel">
+          
+          <!-- Simulation toggle (Highly polished developer option) -->
+          <div class="simulator-control-card">
+            <div class="sim-label-group">
+              <span class="sim-title">TELEMETRY SIMULATOR</span>
+              <span class="sim-desc">Simulate sensor signals (for offline dashboard testing)</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="simulatorToggle" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+          
+          <!-- Command Buttons Grid -->
+          <div class="button-group">
+            <button id="btnCalibrate" class="btn btn-primary button-group-full" onclick="startCalibration()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+              Calibrate Baseline
+            </button>
+            
+            <button id="btnCSV" class="btn btn-secondary" onclick="downloadCSV()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+              Download CSV
+            </button>
+            
+            <button id="btnClear" class="btn btn-danger" onclick="clearDataBuffer()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>
+              Clear Data
+            </button>
+          </div>
+          
+          <!-- Scientific LCD Info Panel -->
+          <div class="info-panel">
+            <div class="info-row">
+              <span class="info-label">Total readings collected:</span>
+              <span id="infoTotalReadings" class="info-value">0</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Session duration:</span>
+              <span id="infoDuration" class="info-value">00:00:00</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Spectral channel highest SNR:</span>
+              <span id="infoHighestSNR" class="info-value teal">—</span>
+            </div>
+            <div class="info-action-container">
+              <span class="action-badge">System Status Action</span>
+              <div id="infoActionText" class="action-text">Initializing sensor networks... Polling telemetry stream.</div>
+            </div>
+          </div>
+          
+        </div>
+      </div>
+      
+    </div>
+
+  </div>
+
+  <!-- ----------------------------------------------------
+       CORE JAVASCRIPT Telemetry Engine
+       ---------------------------------------------------- -->
+  <script>
+    // ----------------------------------------------------
+    // STATE MANAGEMENT
+    // ----------------------------------------------------
+    let dataBuffer = [];
+    const MAX_BUFFER_SIZE = 60;
+    
+    // Physical Science Baselines (seeded to perfectly align raw intensity and absorbance at 12.5 NTU)
+    let I0 = {
+      blue: 1500,
+      green: 1393,
+      red: 1190
+    };
+    
+    const noiseFloor = 0.04; // Empirically configured noise floor for lively and realistic SNR calculation
+    
+    // Status states
+    let isConnected = true;
+    let isSimulatorEnabled = true;
+    let lastSuccessfulFetchTime = Date.now();
+    let consecutiveFailures = 0;
+    
+    // Calibration Variables
+    let isCalibrating = false;
+    let calibrationCounter = 0;
+    let calibrationRawBuffer = { blue: [], green: [], red: [] };
+    
+    // Timers & Duration
+    let startTimestamp = Date.now();
+    let sessionSeconds = 0;
+    
+    // Charts variables
+    let chartAbs, chartTurb, chartInt;
+    
+    // Value animators memory
+    let lastValues = {
+      turbidity: 0,
+      absBlue: 0,
+      absGreen: 0,
+      absRed: 0
+    };
+
+    // ----------------------------------------------------
+    // GAUGE CHART CANVAS RENDERING
+    // ----------------------------------------------------
+    let currentGaugeValue = 0;
+    let currentGaugeSnr = 0;
+
+    function drawGauge(canvasId, value, snr) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const width = canvas.width;
+      const height = canvas.height;
+      
+      // Clear Canvas
+      ctx.clearRect(0, 0, width, height);
+      
+      const cx = width / 2;
+      const cy = height - 25;
+      const radius = Math.min(cx - 20, cy - 20);
+      
+      const startAngle = Math.PI;
+      const endAngle = 2 * Math.PI;
+      
+      // Track renderer helper
+      function drawTrack(sAngle, eAngle, color, lineWidth) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, sAngle, eAngle);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lineWidth;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      }
+      
+      // Draw background slot
+      drawTrack(startAngle, endAngle, 'rgba(15, 24, 37, 0.8)', 12);
+      
+      // Zones
+      const arcLength = Math.PI;
+      const redEnd = startAngle + arcLength * 0.33;
+      const yellowEnd = startAngle + arcLength * 0.66;
+      
+      drawTrack(startAngle, redEnd, 'rgba(255, 94, 94, 0.15)', 8);
+      drawTrack(redEnd, yellowEnd, 'rgba(245, 166, 35, 0.15)', 8);
+      drawTrack(yellowEnd, endAngle, 'rgba(68, 217, 126, 0.15)', 8);
+      
+      // Value bar indicator color selection
+      const targetAngle = startAngle + arcLength * (value / 100);
+      let activeColor = '#ff5e5e';
+      let zoneLabel = 'UNRELIABLE';
+      if (value > 33 && value <= 66) {
+        activeColor = '#f5a623';
+        zoneLabel = 'MARGINAL';
+      } else if (value > 66) {
+        activeColor = '#44d97e';
+        zoneLabel = 'RELIABLE';
+      }
+      
+      if (value > 0) {
+        drawTrack(startAngle, targetAngle, activeColor, 8);
+      }
+      
+      // Draw Needle
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(targetAngle);
+      
+      ctx.beginPath();
+      ctx.moveTo(0, -5);
+      ctx.lineTo(radius - 12, 0);
+      ctx.lineTo(0, 5);
+      ctx.closePath();
+      
+      const needleGrad = ctx.createLinearGradient(0, -5, radius - 12, 0);
+      needleGrad.addColorStop(0, '#e8f4f8');
+      needleGrad.addColorStop(1, activeColor);
+      ctx.fillStyle = needleGrad;
+      ctx.fill();
+      ctx.restore();
+      
+      // Center pin knob
+      ctx.beginPath();
+      ctx.arc(cx, cy, 9, 0, 2 * Math.PI);
+      ctx.fillStyle = '#0f1825';
+      ctx.fill();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = activeColor;
+      ctx.stroke();
+      
+      // LCD readouts inside Gauge
+      ctx.fillStyle = '#e8f4f8';
+      ctx.font = '700 24px "Space Grotesk", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(Math.round(value) + '%', cx, cy - 35);
+      
+      ctx.fillStyle = activeColor;
+      ctx.font = '700 11px "Space Grotesk", sans-serif';
+      ctx.fillText(zoneLabel, cx, cy - 16);
+      
+      ctx.fillStyle = '#6b8fa8';
+      ctx.font = '700 10px "JetBrains Mono", monospace';
+      ctx.fillText('SNR: ' + snr.toFixed(2), cx, cy + 14);
+    }
+
+    function updateGaugeSmoothly(targetValue, targetSnr) {
+      const ease = 0.12;
+      function animate() {
+        const valDiff = targetValue - currentGaugeValue;
+        const snrDiff = targetSnr - currentGaugeSnr;
+        
+        if (Math.abs(valDiff) > 0.05 || Math.abs(snrDiff) > 0.005) {
+          currentGaugeValue += valDiff * ease;
+          currentGaugeSnr += snrDiff * ease;
+          drawGauge('confidenceGauge', currentGaugeValue, currentGaugeSnr);
+          requestAnimationFrame(animate);
+        } else {
+          currentGaugeValue = targetValue;
+          currentGaugeSnr = targetSnr;
+          drawGauge('confidenceGauge', currentGaugeValue, currentGaugeSnr);
+        }
+      }
+      animate();
+    }
+
+    // ----------------------------------------------------
+    // INLINE CHART.JS DASHED PLOT PLUGIN
+    // ----------------------------------------------------
+    const horizontalLinePlugin = {
+      id: 'horizontalLine',
+      afterDraw: (chart, args, options) => {
+        const { ctx, chartArea: { left, right }, scales: { y } } = chart;
+        if (!options || !options.lines) return;
+        
+        ctx.save();
+        options.lines.forEach(line => {
+          const yVal = y.getPixelForValue(line.value);
+          // Check bounds
+          if (yVal < chart.chartArea.top || yVal > chart.chartArea.bottom) return;
+
+          ctx.strokeStyle = line.color || '#ff4444';
+          ctx.lineWidth = line.width || 1.5;
+          ctx.setLineDash(line.dash || [5, 5]);
+          ctx.beginPath();
+          ctx.moveTo(left, yVal);
+          ctx.lineTo(right, yVal);
+          ctx.stroke();
+          
+          if (line.label) {
+            ctx.fillStyle = line.textColor || line.color || '#e8f4f8';
+            ctx.font = line.font || '700 9px "JetBrains Mono", monospace';
+            ctx.textAlign = 'right';
+            ctx.setLineDash([]); // Draw text solid
+            ctx.fillText(line.label, right - 8, yVal - 4);
+          }
+        });
+        ctx.restore();
+      }
+    };
+
+    Chart.register(horizontalLinePlugin);
+
+    // ----------------------------------------------------
+    // CHART INITIALIZATIONS
+    // ----------------------------------------------------
+    function initCharts() {
+      // General chart layout properties
+      const chartOptionsBase = {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: {
+          duration: 250, // fast updating to scroll smoothly
+          easing: 'easeOutSine'
+        },
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top',
+            labels: {
+              boxWidth: 10,
+              boxHeight: 6,
+              color: '#6b8fa8',
+              font: { family: 'Space Grotesk', size: 10, weight: 600 }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { color: '#162235', borderDash: [2, 2] },
+            ticks: { color: '#6b8fa8', font: { family: 'JetBrains Mono', size: 9 } }
+          },
+          y: {
+            grid: { color: '#162235', borderDash: [2, 2] },
+            ticks: { color: '#6b8fa8', font: { family: 'JetBrains Mono', size: 9 } }
+          }
+        }
+      };
+
+      // Chart 1: Absorbance All Wavelengths
+      const ctxAbs = document.getElementById('chartAbsorbance').getContext('2d');
+      chartAbs = new Chart(ctxAbs, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: 'Blue (470nm)',
+              borderColor: '#4a9eff',
+              backgroundColor: 'rgba(74, 158, 255, 0.08)',
+              data: [],
+              borderWidth: 2,
+              fill: true,
+              tension: 0.35,
+              pointRadius: 0,
+              pointHoverRadius: 4
+            },
+            {
+              label: 'Green (525nm)',
+              borderColor: '#44d97e',
+              backgroundColor: 'rgba(68, 217, 126, 0.08)',
+              data: [],
+              borderWidth: 2,
+              fill: true,
+              tension: 0.35,
+              pointRadius: 0,
+              pointHoverRadius: 4
+            },
+            {
+              label: 'Red (636nm)',
+              borderColor: '#ff5e5e',
+              backgroundColor: 'rgba(255, 94, 94, 0.08)',
+              data: [],
+              borderWidth: 2,
+              fill: true,
+              tension: 0.35,
+              pointRadius: 0,
+              pointHoverRadius: 4
+            }
+          ]
+        },
+        options: {
+          ...chartOptionsBase,
+          scales: {
+            ...chartOptionsBase.scales,
+            y: {
+              ...chartOptionsBase.scales.y,
+              min: 0,
+              max: 1.5,
+              ticks: { ...chartOptionsBase.scales.y.ticks, stepSize: 0.25 }
+            }
+          },
+          plugins: {
+            ...chartOptionsBase.plugins,
+            horizontalLine: {
+              lines: [
+                { value: 0.0, color: 'rgba(0, 212, 180, 0.4)', width: 1.5, dash: [4, 4], label: 'Baseline (clean water)', textColor: '#00d4b4' }
+              ]
+            }
+          }
+        }
+      });
+
+      // Chart 2: Turbidity over time
+      const ctxTurb = document.getElementById('chartTurbidity').getContext('2d');
+      chartTurb = new Chart(ctxTurb, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: 'Turbidity (NTU)',
+              borderColor: '#f5a623',
+              backgroundColor: 'rgba(245, 166, 35, 0.08)',
+              data: [],
+              borderWidth: 2,
+              fill: true,
+              tension: 0.3,
+              pointRadius: 0,
+              pointHoverRadius: 4
+            }
+          ]
+        },
+        options: {
+          ...chartOptionsBase,
+          scales: {
+            ...chartOptionsBase.scales,
+            y: {
+              ...chartOptionsBase.scales.y,
+              min: 0,
+              max: 50,
+              ticks: { ...chartOptionsBase.scales.y.ticks, stepSize: 10 }
+            }
+          },
+          plugins: {
+            ...chartOptionsBase.plugins,
+            horizontalLine: {
+              lines: [
+                { value: 5, color: '#44d97e', width: 1.2, dash: [5, 5], label: 'Low threshold (5 NTU)', textColor: '#44d97e' },
+                { value: 15, color: '#f5a623', width: 1.2, dash: [5, 5], label: 'Medium threshold (15 NTU)', textColor: '#f5a623' },
+                { value: 25, color: '#ff5e5e', width: 1.2, dash: [5, 5], label: 'High threshold (25 NTU)', textColor: '#ff5e5e' }
+              ]
+            }
+          }
+        }
+      });
+
+      // Chart 3: Raw Photodiode Intensity
+      const ctxInt = document.getElementById('chartIntensity').getContext('2d');
+      chartInt = new Chart(ctxInt, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: 'Raw Blue',
+              borderColor: '#4a9eff',
+              backgroundColor: 'transparent',
+              data: [],
+              borderWidth: 1.5,
+              tension: 0.25,
+              pointRadius: 0
+            },
+            {
+              label: 'Raw Green',
+              borderColor: '#44d97e',
+              backgroundColor: 'transparent',
+              data: [],
+              borderWidth: 1.5,
+              tension: 0.25,
+              pointRadius: 0
+            },
+            {
+              label: 'Raw Red',
+              borderColor: '#ff5e5e',
+              backgroundColor: 'transparent',
+              data: [],
+              borderWidth: 1.5,
+              tension: 0.25,
+              pointRadius: 0
+            }
+          ]
+        },
+        options: {
+          ...chartOptionsBase,
+          scales: {
+            ...chartOptionsBase.scales,
+            y: {
+              ...chartOptionsBase.scales.y,
+              min: 0,
+              max: 1023,
+              ticks: { ...chartOptionsBase.scales.y.ticks, stepSize: 200 }
+            }
+          },
+          plugins: {
+            ...chartOptionsBase.plugins,
+            horizontalLine: {
+              lines: [
+                { value: I0.blue, color: 'rgba(74, 158, 255, 0.4)', width: 1, dash: [3, 3], label: 'I₀ Blue Baseline', textColor: '#4a9eff' },
+                { value: I0.green, color: 'rgba(68, 217, 126, 0.4)', width: 1, dash: [3, 3], label: 'I₀ Green Baseline', textColor: '#44d97e' },
+                { value: I0.red, color: 'rgba(255, 94, 94, 0.4)', width: 1, dash: [3, 3], label: 'I₀ Red Baseline', textColor: '#ff5e5e' }
+              ]
+            }
+          }
+        }
+      });
+    }
+
+    // ----------------------------------------------------
+    // LIVE TICKING CLOCK
+    // ----------------------------------------------------
+    function initClock() {
+      setInterval(() => {
+        const d = new Date();
+        const hrs = String(d.getHours()).padStart(2, '0');
+        const mins = String(d.getMinutes()).padStart(2, '0');
+        const secs = String(d.getSeconds()).padStart(2, '0');
+        document.getElementById('timestamp').innerText = `${hrs}:${mins}:${secs}`;
+      }, 1000);
+      
+      // Session duration clock
+      setInterval(() => {
+        if (isConnected || isSimulatorEnabled) {
+          sessionSeconds++;
+          const hrs = String(Math.floor(sessionSeconds / 3600)).padStart(2, '0');
+          const mins = String(Math.floor((sessionSeconds % 3600) / 60)).padStart(2, '0');
+          const secs = String(sessionSeconds % 60).padStart(2, '0');
+          document.getElementById('infoDuration').innerText = `${hrs}:${mins}:${secs}`;
+        }
+      }, 1000);
+    }
+
+    // ----------------------------------------------------
+    // METRICS COUNT-UP NUMERIC ANIMATION
+    // ----------------------------------------------------
+    function animateNumericDisplay(elementId, start, end, duration, decimals = 2) {
+      if (start === end) {
+        document.getElementById(elementId).innerText = end.toFixed(decimals);
+        return;
+      }
+      let startTimestamp = null;
+      const step = (timestamp) => {
+        if (!startTimestamp) startTimestamp = timestamp;
+        const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+        const value = progress * (end - start) + start;
+        document.getElementById(elementId).innerText = value.toFixed(decimals);
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else {
+          document.getElementById(elementId).innerText = end.toFixed(decimals);
+        }
+      };
+      requestAnimationFrame(step);
+    }
+
+    // ----------------------------------------------------
+    // TELEMETRY SIMULATOR DATA ENGINE (PHYSICS-BASED MODEL)
+    // ----------------------------------------------------
+    let simAngle = 0;
+    
+    function generatePhysicsSimulatedData() {
+      simAngle += 0.08;
+      
+      // 1. Simulate Turbidity Undulation & Cycles (0.5 to 29.0 NTU)
+      // Generates nice variations, crossing the 25 NTU threshold at peaks
+      let turbidity = 12.0 + 10.0 * Math.sin(simAngle) + 4.5 * Math.sin(simAngle * 2.3) + (Math.random() - 0.5) * 0.8;
+      turbidity = Math.max(0.2, turbidity);
+      
+      // 2. Base clean water photodiode intensity baselines
+      const I0_blue = 1500;
+      const I0_green = 1393;
+      const I0_red = 1190;
+      
+      // 3. Extinction coefficients modeling physical light scattering inside the cuvette
+      // Blue light scatters heavily (highest attenuation), Red light is turbidity-resistant
+      const attenuationBlue = 0.063;
+      const attenuationGreen = 0.053;
+      const attenuationRed = 0.036;
+      
+      // Calculate light intensity decrease based on Beer-Lambert scattering
+      let rawIntensityBlue = Math.round(I0_blue * Math.exp(-attenuationBlue * turbidity) + (Math.random() - 0.5) * 4);
+      let rawIntensityGreen = Math.round(I0_green * Math.exp(-attenuationGreen * turbidity) + (Math.random() - 0.5) * 3);
+      let rawIntensityRed = Math.round(I0_red * Math.exp(-attenuationRed * turbidity) + (Math.random() - 0.5) * 3);
+      
+      // Safeguard boundaries
+      rawIntensityBlue = Math.max(5, Math.min(1023, rawIntensityBlue));
+      rawIntensityGreen = Math.max(5, Math.min(1023, rawIntensityGreen));
+      rawIntensityRed = Math.max(5, Math.min(1023, rawIntensityRed));
+      
+      // 4. Absorbance based on current calibration baseline settings A = log10(I0/I)
+      let absBlue = Math.log10(I0.blue / rawIntensityBlue);
+      let absGreen = Math.log10(I0.green / rawIntensityGreen);
+      let absRed = Math.log10(I0.red / rawIntensityRed);
+      
+      // Clamp absorbance bounds
+      absBlue = Math.max(0.0001, parseFloat(absBlue.toFixed(4)));
+      absGreen = Math.max(0.0001, parseFloat(absGreen.toFixed(4)));
+      absRed = Math.max(0.0001, parseFloat(absRed.toFixed(4)));
+      
+      // 5. Package standard telemetry packet
+      return {
+        time_ms: dataBuffer.length === 0 ? 1000 : dataBuffer[dataBuffer.length - 1].time_ms + 1000,
+        blue_intensity: rawIntensityBlue,
+        green_intensity: rawIntensityGreen,
+        red_intensity: rawIntensityRed,
+        blue_absorbance: absBlue,
+        green_absorbance: absGreen,
+        red_absorbance: absRed,
+        turbidity_ntu: turbidity
+      };
+    }
+
+    // ----------------------------------------------------
+    // TELEMETRY PROCESSING PIPELINE
+    // ----------------------------------------------------
+    function processTelemetryPacket(packet) {
+      // If we are actively calibrating, buffer the raw intensities and do not load normally
+      if (isCalibrating) {
+        handleCalibrationCycle(packet);
+        return;
+      }
+      
+      // 1. Calculate dynamic local values (ensure they correspond to current browser baselines)
+      const calculatedAbsBlue = Math.max(0, parseFloat(Math.log10(I0.blue / Math.max(1, packet.blue_intensity)).toFixed(4)));
+      const calculatedAbsGreen = Math.max(0, parseFloat(Math.log10(I0.green / Math.max(1, packet.green_intensity)).toFixed(4)));
+      const calculatedAbsRed = Math.max(0, parseFloat(Math.log10(I0.red / Math.max(1, packet.red_intensity)).toFixed(4)));
+      
+      const refinedPacket = {
+        ...packet,
+        blue_absorbance: calculatedAbsBlue,
+        green_absorbance: calculatedAbsGreen,
+        red_absorbance: calculatedAbsRed
+      };
+      
+      // 2. Add to Rolling Data Buffer
+      dataBuffer.push(refinedPacket);
+      if (dataBuffer.length > MAX_BUFFER_SIZE) {
+        dataBuffer.shift();
+      }
+      
+      // 3. Animate Hero Metric Numbers
+      animateHeroMetrics(refinedPacket);
+      
+      // 4. Update Alarm Threshold System
+      evalAlarmsAndThresholds(refinedPacket.turbidity_ntu);
+      
+      // 5. Calculate SNR & Confidence and Update Semicircular Gauge
+      computeSNRAndGauge(refinedPacket);
+      
+      // 6. Update Rolling Chart Visualizations
+      refreshChartsData();
+      
+      // 7. Update Recent Readings Table
+      appendRowToTable(refinedPacket);
+      
+      // 8. Update Info Panel Statistics
+      updateInfoPanel(refinedPacket);
+    }
+
+    function animateHeroMetrics(packet) {
+      animateNumericDisplay('valTurbidity', lastValues.turbidity, packet.turbidity_ntu, 300, 2);
+      animateNumericDisplay('valAbsBlue', lastValues.absBlue, packet.blue_absorbance, 300, 4);
+      animateNumericDisplay('valAbsGreen', lastValues.absGreen, packet.green_absorbance, 300, 4);
+      animateNumericDisplay('valAbsRed', lastValues.absRed, packet.red_absorbance, 300, 4);
+      
+      document.getElementById('valIntBlue').innerText = `Intensity: ${packet.blue_intensity}`;
+      document.getElementById('valIntGreen').innerText = `Intensity: ${packet.green_intensity}`;
+      document.getElementById('valIntRed').innerText = `Intensity: ${packet.red_intensity}`;
+      
+      // Save last values
+      lastValues.turbidity = packet.turbidity_ntu;
+      lastValues.absBlue = packet.blue_absorbance;
+      lastValues.absGreen = packet.green_absorbance;
+      lastValues.absRed = packet.red_absorbance;
+    }
+
+    function evalAlarmsAndThresholds(ntu) {
+      const badge = document.getElementById('badgeTurbidity');
+      const card = document.getElementById('turbidityCard');
+      const body = document.body;
+      
+      // Remove all classes first
+      badge.classList.remove('clear', 'moderate', 'high', 'critical');
+      
+      if (ntu < 5) {
+        badge.innerText = "CLEAR";
+        badge.classList.add('clear');
+        card.classList.remove('critical-tint');
+        body.classList.remove('red-flash-active');
+      } else if (ntu >= 5 && ntu < 15) {
+        badge.innerText = "MODERATE";
+        badge.classList.add('moderate');
+        card.classList.remove('critical-tint');
+        body.classList.remove('red-flash-active');
+      } else if (ntu >= 15 && ntu <= 25) {
+        badge.innerText = "HIGH";
+        badge.classList.add('high');
+        card.classList.remove('critical-tint');
+        body.classList.remove('red-flash-active');
+      } else {
+        // Critical status (> 25 NTU)
+        badge.innerText = "CRITICAL";
+        badge.classList.add('critical');
+        
+        // Permanent subtle red tint shift in Turbidity card
+        card.classList.add('critical-tint');
+        
+        // One-time red flash of dashboard border
+        if (!body.classList.contains('red-flash-active')) {
+          body.classList.add('red-flash-active');
+          // Automatically remove after animation completes so it can re-trigger if it fluctuates
+          setTimeout(() => {
+            // we keep the active flash completed but body state stays alert
+          }, 1500);
+        }
+      }
+    }
+
+    function computeSNRAndGauge(packet) {
+      // SNR = |current absorbance - baseline absorbance (clean water is 0)| / noise floor
+      const snrBlue = packet.blue_absorbance / noiseFloor;
+      const snrGreen = packet.green_absorbance / noiseFloor;
+      const snrRed = packet.red_absorbance / noiseFloor;
+      
+      // Calculate max SNR
+      const maxSNR = Math.max(snrBlue, snrGreen, snrRed);
+      
+      // Confidence = max(0, min(100, (SNR / 3) * 100))
+      const confidence = Math.max(0, Math.min(100, (maxSNR / 3) * 100));
+      
+      // Smooth sweep update needle
+      updateGaugeSmoothly(confidence, maxSNR);
+    }
+
+    function refreshChartsData() {
+      // Generate professional rolling historical timestamps: e.g. Now, -1s, -2s, ...
+      const labels = dataBuffer.map((d, index) => {
+        const secAgo = dataBuffer.length - 1 - index;
+        return secAgo === 0 ? 'Now' : `-${secAgo}s`;
+      });
+      
+      // Chart 1: Absorbances
+      chartAbs.data.labels = labels;
+      chartAbs.data.datasets[0].data = dataBuffer.map(d => d.blue_absorbance);
+      chartAbs.data.datasets[1].data = dataBuffer.map(d => d.green_absorbance);
+      chartAbs.data.datasets[2].data = dataBuffer.map(d => d.red_absorbance);
+      chartAbs.update('none'); // silent update
+      
+      // Chart 2: Turbidity
+      chartTurb.data.labels = labels;
+      chartTurb.data.datasets[0].data = dataBuffer.map(d => d.turbidity_ntu);
+      
+      // Color-shift filled area dynamically if line crosses 25 NTU
+      const currentTurbidity = dataBuffer[dataBuffer.length - 1].turbidity_ntu;
+      if (currentTurbidity > 25) {
+        chartTurb.data.datasets[0].backgroundColor = 'rgba(255, 94, 94, 0.2)';
+        chartTurb.data.datasets[0].borderColor = '#ff4444';
+      } else {
+        chartTurb.data.datasets[0].backgroundColor = 'rgba(245, 166, 35, 0.08)';
+        chartTurb.data.datasets[0].borderColor = '#f5a623';
+      }
+      chartTurb.update('none');
+      
+      // Chart 3: Raw Intensity
+      chartInt.data.labels = labels;
+      chartInt.data.datasets[0].data = dataBuffer.map(d => d.blue_intensity);
+      chartInt.data.datasets[1].data = dataBuffer.map(d => d.green_intensity);
+      chartInt.data.datasets[2].data = dataBuffer.map(d => d.red_intensity);
+      
+      // Update baseline lines locations dynamically
+      chartInt.options.plugins.horizontalLine.lines = [
+        { value: I0.blue, color: 'rgba(74, 158, 255, 0.45)', width: 1, dash: [4, 4], label: `I₀ Blue: ${Math.round(I0.blue)}`, textColor: '#4a9eff' },
+        { value: I0.green, color: 'rgba(68, 217, 126, 0.45)', width: 1, dash: [4, 4], label: `I₀ Green: ${Math.round(I0.green)}`, textColor: '#44d97e' },
+        { value: I0.red, color: 'rgba(255, 94, 94, 0.45)', width: 1, dash: [4, 4], label: `I₀ Red: ${Math.round(I0.red)}`, textColor: '#ff5e5e' }
+      ];
+      chartInt.update('none');
+    }
+
+    function appendRowToTable(packet) {
+      const tableBody = document.getElementById('tableBody');
+      
+      // Build row HTML
+      const rowHTML = `
+        <tr class="new-row-animation">
+          <td>${packet.time_ms}</td>
+          <td>${packet.blue_absorbance.toFixed(4)}</td>
+          <td>${packet.green_absorbance.toFixed(4)}</td>
+          <td>${packet.red_absorbance.toFixed(4)}</td>
+          <td>${packet.blue_intensity}</td>
+          <td>${packet.green_intensity}</td>
+          <td>${packet.red_intensity}</td>
+          <td>${packet.turbidity_ntu.toFixed(2)}</td>
+        </tr>
+      `;
+      
+      // Insert at very top
+      tableBody.insertAdjacentHTML('afterbegin', rowHTML);
+      
+      // Keep only last 10 rows in table
+      while (tableBody.children.length > 10) {
+        tableBody.removeChild(tableBody.lastChild);
+      }
+      
+      // Clean slide-in animation class from previous top row
+      if (tableBody.children.length > 1) {
+        setTimeout(() => {
+          tableBody.children[1].classList.remove('new-row-animation');
+        }, 300);
+      }
+    }
+
+    function updateInfoPanel(packet) {
+      // 1. Total readings
+      document.getElementById('infoTotalReadings').innerText = dataBuffer.length;
+      
+      // 2. Highest SNR channel auto-detection
+      const snrBlue = packet.blue_absorbance / noiseFloor;
+      const snrGreen = packet.green_absorbance / noiseFloor;
+      const snrRed = packet.red_absorbance / noiseFloor;
+      
+      const maxSNR = Math.max(snrBlue, snrGreen, snrRed);
+      let highestChannel = 'Blue (470 nm)';
+      if (maxSNR === snrGreen) highestChannel = 'Green (525 nm)';
+      if (maxSNR === snrRed) highestChannel = 'Red (636 nm)';
+      
+      document.getElementById('infoHighestSNR').innerText = `${highestChannel} (SNR: ${maxSNR.toFixed(2)})`;
+      
+      // 3. Dynamic scientific advisory text based on Turbidity thresholds
+      const ntu = packet.turbidity_ntu;
+      const actionText = document.getElementById('infoActionText');
+      
+      if (ntu < 5) {
+        actionText.innerHTML = "Water clarity is <strong>EXCELLENT</strong>. Optical scatter is negligible. Microplastic size distribution indices and absorbance data are highly reliable.";
+      } else if (ntu >= 5 && ntu < 15) {
+        actionText.innerHTML = "Water clarity is <strong>MODERATE</strong>. Subtle scattering detected. Red spectral wavelength (636nm) remains most resilient and reliable.";
+      } else if (ntu >= 15 && ntu <= 25) {
+        actionText.innerHTML = "High scatter from suspended solids. <strong>ADVISORY:</strong> Recalibrate baseline with current filtered solution to mitigate scattering offset.";
+      } else {
+        actionText.innerHTML = "<strong>CRITICAL TURBIDITY:</strong> Heavy scattering dominates sensor photodiodes. Absorbance-based diagnostic indices are unreliable. Recommend physical pre-filtration.";
+      }
+    }
+
+    // ----------------------------------------------------
+    // BASELINE CALIBRATION ENGINE
+    // ----------------------------------------------------
+    function startCalibration() {
+      if (isCalibrating) return;
+      
+      isCalibrating = true;
+      calibrationCounter = 0;
+      calibrationRawBuffer = { blue: [], green: [], red: [] };
+      
+      const btn = document.getElementById('btnCalibrate');
+      btn.classList.add('calibrating');
+      btn.disabled = true;
+      btn.innerHTML = `
+        <svg class="water-drop-svg" style="animation: dropPulse 0.5s infinite;" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+        Calibrating (0/5)...
+      `;
+    }
+
+    function handleCalibrationCycle(packet) {
+      calibrationCounter++;
+      
+      calibrationRawBuffer.blue.push(packet.blue_intensity);
+      calibrationRawBuffer.green.push(packet.green_intensity);
+      calibrationRawBuffer.red.push(packet.red_intensity);
+      
+      const btn = document.getElementById('btnCalibrate');
+      btn.innerText = `Calibrating (${calibrationCounter}/5)...`;
+      
+      if (calibrationCounter >= 5) {
+        // Compute Averages
+        const avg = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
+        
+        I0.blue = avg(calibrationRawBuffer.blue);
+        I0.green = avg(calibrationRawBuffer.green);
+        I0.red = avg(calibrationRawBuffer.red);
+        
+        // Reset state
+        isCalibrating = false;
+        btn.classList.remove('calibrating');
+        btn.disabled = false;
+        btn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+          Calibrate Baseline
+        `;
+        
+        // Dynamic Buffer Recalculation: update all absorbances in dataBuffer based on new I0 baseline
+        dataBuffer = dataBuffer.map(d => {
+          const newAbsBlue = Math.max(0, parseFloat(Math.log10(I0.blue / Math.max(1, d.blue_intensity)).toFixed(4)));
+          const newAbsGreen = Math.max(0, parseFloat(Math.log10(I0.green / Math.max(1, d.green_intensity)).toFixed(4)));
+          const newAbsRed = Math.max(0, parseFloat(Math.log10(I0.red / Math.max(1, d.red_intensity)).toFixed(4)));
+          return {
+            ...d,
+            blue_absorbance: newAbsBlue,
+            green_absorbance: newAbsGreen,
+            red_absorbance: newAbsRed
+          };
+        });
+        
+        // Smoothly refresh
+        refreshChartsData();
+        
+        // Empty old table rows and re-fill with recalculated values to maintain structural integrity
+        const tableBody = document.getElementById('tableBody');
+        tableBody.innerHTML = '';
+        const recent10 = dataBuffer.slice(-10).reverse();
+        recent10.forEach(p => appendRowToTable(p));
+        
+        // Animate metrics cards to recalculated values
+        if (dataBuffer.length > 0) {
+          const newest = dataBuffer[dataBuffer.length - 1];
+          animateHeroMetrics(newest);
+          computeSNRAndGauge(newest);
+        }
+      }
+    }
+
+    // ----------------------------------------------------
+    // CSV EXPORT UTILITY (CLIENT-SIDE RFC-4180 COMPLIANT)
+    // ----------------------------------------------------
+    function downloadCSV() {
+      if (dataBuffer.length === 0) {
+        alert("Buffer is currently empty. Collect sensor readings before exporting.");
+        return;
+      }
+      
+      const headers = ["time_ms", "blue_intensity", "green_intensity", "red_intensity", "blue_absorbance", "green_absorbance", "red_absorbance", "turbidity_ntu"];
+      
+      const rows = dataBuffer.map(d => [
+        d.time_ms,
+        d.blue_intensity,
+        d.green_intensity,
+        d.red_intensity,
+        d.blue_absorbance.toFixed(4),
+        d.green_absorbance.toFixed(4),
+        d.red_absorbance.toFixed(4),
+        d.turbidity_ntu.toFixed(2)
+      ]);
+      
+      // Concatenate standard RFC lines
+      const csvString = [
+        headers.join(","),
+        ...rows.map(r => r.join(","))
+      ].join("\n");
+      
+      // Generate Downloadable Blob Anchor
+      const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute('href', url);
+      downloadAnchor.setAttribute('download', `microsense_optical_telemetry_${Date.now()}.csv`);
+      downloadAnchor.style.visibility = 'hidden';
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      document.body.removeChild(downloadAnchor);
+    }
+
+    // ----------------------------------------------------
+    // CLEAR ROLL-BUFFER SYSTEM
+    // ----------------------------------------------------
+    function clearDataBuffer() {
+      dataBuffer = [];
+      document.getElementById('tableBody').innerHTML = '';
+      
+      // Reset variables
+      lastValues = { turbidity: 0, absBlue: 0, absGreen: 0, absRed: 0 };
+      currentGaugeValue = 0;
+      currentGaugeSnr = 0;
+      
+      // Blank metric displays
+      document.getElementById('valTurbidity').innerText = '0.00';
+      document.getElementById('badgeTurbidity').innerText = 'CLEAR';
+      document.getElementById('badgeTurbidity').className = 'turbidity-badge clear';
+      document.getElementById('turbidityCard').classList.remove('critical-tint');
+      document.body.classList.remove('red-flash-active');
+      
+      document.getElementById('valAbsBlue').innerText = '0.0000';
+      document.getElementById('valAbsGreen').innerText = '0.0000';
+      document.getElementById('valAbsRed').innerText = '0.0000';
+      
+      document.getElementById('valIntBlue').innerText = 'Intensity: 0';
+      document.getElementById('valIntGreen').innerText = 'Intensity: 0';
+      document.getElementById('valIntRed').innerText = 'Intensity: 0';
+      
+      // Clear charts
+      chartAbs.data.labels = [];
+      chartAbs.data.datasets.forEach(dataset => dataset.data = []);
+      chartAbs.update();
+      
+      chartTurb.data.labels = [];
+      chartTurb.data.datasets.forEach(dataset => dataset.data = []);
+      chartTurb.update();
+      
+      chartInt.data.labels = [];
+      chartInt.data.datasets.forEach(dataset => dataset.data = []);
+      chartInt.update();
+      
+      // Reset gauge
+      drawGauge('confidenceGauge', 0, 0);
+      
+      // Info reset
+      document.getElementById('infoTotalReadings').innerText = '0';
+      document.getElementById('infoHighestSNR').innerText = '—';
+      document.getElementById('infoActionText').innerText = 'Rolling telemetry log cleared. Collecting next incoming stream...';
+    }
+
+    // ----------------------------------------------------
+    // REAL-TIME HTTP POLLING ENGINE (FETCH /data)
+    // ----------------------------------------------------
+    function pollESP32Telemetry() {
+      // 1. If simulated toggle is checked, bypass physical HTTP request
+      if (isSimulatorEnabled) {
+        setStatus('SIMULATING');
+        const simulatedPacket = generatePhysicsSimulatedData();
+        processTelemetryPacket(simulatedPacket);
+        return;
+      }
+      
+      // 2. Set timeout parameter of 2000 milliseconds for ESP32 connection resilience
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      
+      fetch('/data', { signal: controller.signal })
+        .then(response => {
+          clearTimeout(timeoutId);
+          if (!response.ok) {
+            throw new Error(`HTTP network error: status ${response.status}`);
+          }
+          return response.json();
+        })
+        .then(data => {
+          consecutiveFailures = 0;
+          lastSuccessfulFetchTime = Date.now();
+          setStatus('LIVE');
+          processTelemetryPacket(data);
+        })
+        .catch(err => {
+          clearTimeout(timeoutId);
+          consecutiveFailures++;
+          
+          // If connection failure persists beyond 3 seconds (3 consecutive cycles), declare disconnected
+          if (consecutiveFailures >= 3 || (Date.now() - lastSuccessfulFetchTime > 3000)) {
+            setStatus('DISCONNECTED');
+            
+            // Log once to console to avoid spam
+            if (consecutiveFailures === 3) {
+              console.warn("Connection lost to ESP32 sensor platform. Device is offline.", err);
+            }
+          }
+        });
+    }
+
+    function setStatus(state) {
+      const dot = document.getElementById('statusDot');
+      const label = document.getElementById('statusText');
+      
+      dot.className = 'status-dot';
+      
+      if (state === 'LIVE') {
+        dot.classList.add('live');
+        label.innerText = 'LIVE';
+        isConnected = true;
+      } else if (state === 'SIMULATING') {
+        dot.classList.add('simulating');
+        label.innerText = 'SIMULATING';
+        isConnected = true;
+      } else {
+        dot.classList.add('disconnected');
+        label.innerText = 'DISCONNECTED';
+        isConnected = false;
+      }
+    }
+
+    // ----------------------------------------------------
+    // APP INITIALIZATIONS
+    // ----------------------------------------------------
+    window.addEventListener('DOMContentLoaded', () => {
+      initClock();
+      initCharts();
+      
+      // Initial render for gauge
+      drawGauge('confidenceGauge', 0, 0);
+      
+      // Setup Simulator State Toggle Handler
+      const simToggle = document.getElementById('simulatorToggle');
+      isSimulatorEnabled = simToggle.checked;
+      
+      simToggle.addEventListener('change', () => {
+        isSimulatorEnabled = simToggle.checked;
+        if (isSimulatorEnabled) {
+          setStatus('SIMULATING');
+          document.getElementById('infoActionText').innerHTML = "Telemetry simulator enabled. Feeding simulated data stream... Ready.";
+        } else {
+          consecutiveFailures = 0;
+          lastSuccessfulFetchTime = Date.now();
+          setStatus('LIVE');
+          document.getElementById('infoActionText').innerHTML = "Polling physical ESP32 optical sensors at <code>GET /data</code>...";
+        }
+      });
+      
+      // Fire polling interval loop every 1000ms
+      setInterval(pollESP32Telemetry, 1000);
+      
+      // Seed with 1 sample simulated point upon boot to make dashboard immediately gorgeous and responsive
+      pollESP32Telemetry();
+    });
+  </script>
+</body>
+</html>
